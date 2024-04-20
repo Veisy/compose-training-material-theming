@@ -21,23 +21,52 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.animateColor
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +75,7 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.example.woof.data.Dog
 import com.example.woof.data.dogs
 import com.example.woof.ui.theme.WoofTheme
@@ -69,6 +99,7 @@ class MainActivity : ComponentActivity() {
 /**
  * Composable that displays an app bar and a list of dogs.
  */
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun WoofApp() {
     Scaffold(
@@ -76,12 +107,41 @@ fun WoofApp() {
             WoofTopAppBar()
         }
     ) {
-        LazyColumn(contentPadding = it) {
-            items(dogs) {
-                DogItem(
-                    dog = it,
-                    modifier = Modifier.padding(dimensionResource(R.dimen.padding_small))
+        // Start the animation immediately.
+        val visibleState = remember {
+            MutableTransitionState(false).apply {
+                targetState = true
+            }
+        }
+
+        // Fade in entry animation for the entire list
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter = fadeIn(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy
                 )
+            ),
+            exit = fadeOut()
+        ) {
+            LazyColumn(contentPadding = it) {
+                itemsIndexed(dogs) { index, dog ->
+                    DogItem(
+                        dog = dog,
+                        modifier = Modifier
+                            .padding(dimensionResource(R.dimen.padding_small))
+                            // Animate each list item to slide in vertically
+                            .animateEnterExit(
+                                enter = slideInVertically(
+                                    animationSpec = spring(
+                                        stiffness = Spring.StiffnessVeryLow,
+                                        dampingRatio = Spring.DampingRatioLowBouncy
+                                    ),
+                                    initialOffsetY = { it * (index + 1) } // staggered entrance
+                                )
+                            )
+                    )
+                }
             }
         }
     }
@@ -121,15 +181,82 @@ fun DogItem(
     dog: Dog,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier) {
-        Row(
+    var expanded by remember { mutableStateOf(false) }
+
+    val colorStatic by animateColorAsState(
+        targetValue = if (expanded) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        },
+        label = "expandColorStaticAnimation"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "infiniteTransition")
+    val colorInfinite by infiniteTransition.animateColor(
+        initialValue = MaterialTheme.colorScheme.primaryContainer,
+        targetValue = MaterialTheme.colorScheme.tertiaryContainer,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "expandColorInfiniteAnimation"
+    )
+
+    Card(
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = modifier
+    ) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(dimensionResource(R.dimen.padding_small))
+                .animateContentSize(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+                .background(color = if (expanded) colorInfinite else colorStatic)
         ) {
-            DogIcon(dog.imageResourceId)
-            DogInformation(dog.name, dog.age)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(dimensionResource(R.dimen.padding_small))
+            ) {
+                DogIcon(dog.imageResourceId)
+                DogInformation(dog.name, dog.age)
+                Spacer(modifier = Modifier.weight(1f))
+                DogItemButton(
+                    expanded = expanded,
+                    onClick = { expanded = !expanded }
+                )
+            }
+            if (expanded) {
+                DogHobby(
+                    dogHobby = dog.hobbies,
+                    modifier = Modifier.padding(
+                        start = dimensionResource(R.dimen.padding_medium),
+                        top = dimensionResource(R.dimen.padding_small),
+                        end = dimensionResource(R.dimen.padding_medium),
+                        bottom = dimensionResource(R.dimen.padding_medium)
+                    )
+                )
+            }
         }
+    }
+}
+
+@Composable
+fun DogItemButton(
+    expanded: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(onClick = onClick, modifier = modifier) {
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            tint = MaterialTheme.colorScheme.secondary,
+            contentDescription = stringResource(id = R.string.expand_button_content_description)
+        )
     }
 }
 
@@ -180,6 +307,23 @@ fun DogInformation(
         )
         Text(
             text = stringResource(R.string.years_old, dogAge),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+    }
+}
+
+@Composable
+fun DogHobby(
+    @StringRes dogHobby: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.about),
+            style = MaterialTheme.typography.labelSmall,
+        )
+        Text(
+            text = stringResource(id = dogHobby),
             style = MaterialTheme.typography.bodyLarge,
         )
     }

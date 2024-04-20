@@ -74,6 +74,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.core:core-ktx:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
 
